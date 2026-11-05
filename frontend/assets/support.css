@@ -280,8 +280,7 @@ button.directory-card:hover { border-color: #bfd9d5; background: #fbfdfd; }
 .mode-toggle { display: inline-flex; padding: 3px; border-radius: var(--radius); background: var(--line-soft); }
 .mode-option { padding: 5px 12px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; font-size: var(--text-sm); font-weight: 600; }
 .mode-option.active { background: var(--surface); color: var(--teal-dark); box-shadow: 0 1px 3px rgb(27 39 49 / 10%); }
-.composer-select, .fault-control select { height: 32px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink-soft); font-size: var(--text-sm); }
-.fault-control { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; color: var(--red); font-size: var(--text-sm); font-weight: 600; }
+.composer-select { height: 32px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink-soft); font-size: var(--text-sm); }
 .composer textarea { width: 100%; min-height: 48px; max-height: 160px; padding: 4px 0; border: 0; outline: 0; resize: vertical; color: var(--ink); font-size: var(--text-base); line-height: 1.5; }
 .composer textarea.expanded { min-height: 80px; }
 .composer textarea::placeholder { color: var(--faint); }
@@ -340,6 +339,8 @@ button.directory-card:hover { border-color: #bfd9d5; background: #fbfdfd; }
 .eligibility-line.ineligible { background: var(--amber-soft); color: var(--amber); }
 .eligibility-line.refunded { background: var(--blue-soft); color: var(--blue); text-transform: capitalize; }
 
+.action-reason { display: grid; gap: 4px; margin-bottom: 10px; color: var(--muted); font-size: var(--text-sm); }
+.action-reason textarea { width: 100%; min-height: 52px; padding: 6px 8px; resize: vertical; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); font: inherit; font-size: var(--text-sm); }
 .approver-route { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; color: var(--muted); font-size: var(--text-sm); }
 .approver-route select { min-width: 0; flex: 1; height: 34px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); font-size: var(--text-sm); }
 .approver-route.inline { margin: 8px 0 0; }

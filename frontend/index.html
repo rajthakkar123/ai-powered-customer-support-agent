@@ -76,9 +76,7 @@
                   <button type="button" class="mode-option active" data-mode="customer_message" role="radio" aria-checked="true">Customer says…</button>
                   <button type="button" class="mode-option" data-mode="agent_question" role="radio" aria-checked="false">Ask copilot</button>
                 </div>
-                <select id="sampleMessageSelect" class="composer-select" aria-label="Insert a sample customer message"><option value="">Sample messages…</option></select>
-                <label id="faultControl" class="fault-control" hidden title="Development only: make one backend tool fail for the next turn"><span>Simulate failure</span><select id="faultSelect"><option value="">None</option></select></label>
-              </div>
+                <select id="sampleMessageSelect" class="composer-select" aria-label="Insert a sample customer message"><option value="">Sample messages…</option></select>              </div>
               <label class="sr-only" for="messageInput">Message text</label>
               <textarea id="messageInput" rows="2" maxlength="4000" placeholder="Type what the customer wrote, e.g. “My order arrived damaged…”" disabled></textarea>
               <div class="composer-footer"><div id="composerHint" class="composer-hint">Simulates an incoming customer message. The copilot drafts a reply for you to review.</div><button id="sendButton" class="send-button" type="submit" disabled><span id="sendLabel">Simulate message</span></button></div>
@@ -163,6 +161,7 @@
 
             <section class="context-section action-section">
               <div class="section-heading"><h3>Actions</h3><span class="approval-lock">Needs an approver</span></div>
+              <label class="action-reason"><span>Customer's reason</span><textarea id="actionReason" rows="2" maxlength="500" placeholder="Ask the customer why, then note it here"></textarea></label>
               <label class="approver-route"><span>Send to</span><select id="approverSelect" aria-label="Approver who decides the proposal"><option value="">Any approver</option></select></label>
               <div class="action-buttons"><button id="refundActionButton" class="action-button" type="button" disabled>Propose refund</button><button id="cancelActionButton" class="action-button" type="button" disabled>Propose cancellation</button></div>
               <div id="actionCard" class="action-card" hidden></div>

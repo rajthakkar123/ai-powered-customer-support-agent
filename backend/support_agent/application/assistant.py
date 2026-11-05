@@ -26,7 +26,7 @@ from .tools import SupportTools
 from .turns import FACT_INTENTS, TurnFormatError, parse_turn
 
 LOGGER = logging.getLogger("support_agent")
-PROMPT_VERSION = "2026-11-05.2"
+PROMPT_VERSION = "2026-11-05.3"
 MODES = ("customer_message", "agent_question")
 # Policy decisions come from deterministic tools: an answer with one of these intents must be
 # backed by the matching check in the same turn, never by the model reading the policy text.
@@ -53,6 +53,19 @@ NOT_FOUND_WORDING = re.compile(
     r"(find|locate)|not found|no (record|order) of",
     re.IGNORECASE,
 )
+# A proposal's reason must be grounded in what was actually said in the conversation. Words that
+# only restate the request ("cancel my order") do not count as a reason.
+REASON_WORD = re.compile(r"[a-z]{3,}")
+_REQUEST_WORD_LIST = (
+    "the and for you your can could would like please want wants wanted need needs this that "
+    "with have has had was are get just now they their them she her his him customer customers "
+    "request requested requests requesting ask asked asks cancel cancels cancelled canceled "
+    "cancelling canceling cancellation refund refunds refunded refunding return returns "
+    "returned returning order orders ord item items money back full help reason why because "
+    "since active input type message untrusted data not instructions agent question"
+)
+REQUEST_WORDS = frozenset(_REQUEST_WORD_LIST.split())
+REASON_GROUNDING = 0.6
 SYSTEM_PROMPT = """You are the drafting copilot for a customer support agent at the Northstar store.
 
 Each turn is one of two input types:
@@ -779,6 +792,17 @@ class SupportAssistant:
                 status="clarification_required",
                 reason="missing_backend_evidence",
             )
+        # Runs after the evidence check, so the question never names an unverified order.
+        action = turn["proposed_action"]
+        if isinstance(action, dict) and not _reason_is_grounded(str(action["reason"]), messages):
+            turn = _ask_for_reason(turn, action, mode)
+            _step(
+                trace,
+                request_id,
+                kind="guardrail",
+                status="action_removed",
+                reason="customer_reason_missing",
+            )
         return turn
 
     def _propose(
@@ -869,6 +893,54 @@ def _framed_input(mode: str, customer_id: str, text: str) -> str:
             f"<customer_message>\n{safe}\n</customer_message>"
         )
     return f"Active customer: {customer_id}\nInput type: AGENT QUESTION\n{text}"
+
+
+def _reason_stems(text: str) -> set[str]:
+    # A five-letter prefix is a crude stem, so "damaged" matches "damage" and "cheaper" "cheap".
+    return {word[:5] for word in REASON_WORD.findall(text.lower()) if word not in REQUEST_WORDS}
+
+
+def _reason_is_grounded(reason: str, messages: list[dict[str, object]]) -> bool:
+    """True when most of the reason's words come from the conversation's inputs.
+
+    Only framed customer messages and agent questions count, never tool results or the
+    model's own replies, so the model cannot supply a reason the customer never gave.
+    """
+    stems = _reason_stems(reason)
+    if not stems:
+        return False
+    said: set[str] = set()
+    for message in messages:
+        content = message.get("content")
+        if message.get("role") == "user" and isinstance(content, str) and "Input type:" in content:
+            said |= _reason_stems(content)
+    return len(stems & said) / len(stems) >= REASON_GROUNDING
+
+
+def _ask_for_reason(
+    turn: dict[str, object], action: dict[str, object], mode: str
+) -> dict[str, object]:
+    order_id = action["order_id"]
+    if action["action_type"] == "refund":
+        question = (
+            f"I can help with a refund for order {order_id}. Could you tell me why you'd like a "
+            "refund? It helps our team review your request."
+        )
+    else:
+        question = (
+            f"I can help with cancelling order {order_id}. Could you tell me why you'd like to "
+            "cancel it? It helps our team review your request."
+        )
+    return {
+        **turn,
+        "needs_clarification": True,
+        "agent_summary": (
+            "Not proposed yet: the customer has not said why they want this, and every refund "
+            f"or cancellation records their reason. {turn['agent_summary']}"
+        ),
+        "suggested_reply": question if mode == "customer_message" else None,
+        "proposed_action": None,
+    }
 
 
 def _clarification_turn(question: str) -> dict[str, object]:

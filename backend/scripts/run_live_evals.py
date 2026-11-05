@@ -240,6 +240,29 @@ def grade_cancellation(run: Run) -> None:
     )
     if proposal:
         run.check(proposal["status"] == "pending_approval", "cancellation should await approval")
+        run.check(
+            re.search(r"mistake", proposal.get("reason") or "", re.I) is not None,
+            "the proposal should record the customer's reason",
+        )
+
+
+def grade_reason_requested(run: Run) -> None:
+    first, second = run.results
+    run.check(first["proposal"] is None, "nothing should be proposed before the customer says why")
+    run.check(
+        re.search(r"\b(why|reason)\b", first["answer"] or "", re.I) is not None,
+        "the first reply should ask why the customer wants to cancel",
+    )
+    proposal = second["proposal"]
+    run.check(
+        proposal is not None and proposal["action_type"] == "order_change",
+        "a cancellation should be proposed once the reason is given",
+    )
+    if proposal:
+        run.check(
+            re.search(r"cheaper|price", proposal.get("reason") or "", re.I) is not None,
+            "the proposal should record the reason the customer gave",
+        )
 
 
 CASES: dict[str, tuple[str, list[Turn], Callable[[Run], None]]] = {
@@ -312,6 +335,14 @@ CASES: dict[str, tuple[str, list[Turn], Callable[[Run], None]]] = {
         "Order change proposal",
         [Turn("Please cancel order ord-5005, I ordered the filters by mistake.")],
         grade_cancellation,
+    ),
+    "cancellation_reason": (
+        "Ask the customer's reason before proposing a cancellation",
+        [
+            Turn("Please cancel order ord-5005."),
+            Turn("I found the same filters cheaper somewhere else."),
+        ],
+        grade_reason_requested,
     ),
 }
 

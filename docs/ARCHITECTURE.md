@@ -18,7 +18,7 @@ Browser (frontend/)                       Server (support_agent/)
                                                    │  4. repeat until a structured final answer (≤5 rounds,
                                                    │     ≤6 tool calls; last round has tools switched off)
                                                    │  5. server guardrails (evidence, required checks,
-                                                   │     existence masking, scope)
+                                                   │     existence masking, scope, customer's reason)
                                                    │  6. proposed action → application/actions.py
                                                    │       policy re-check → PENDING proposal (never executed)
                                                    ▼
@@ -71,6 +71,7 @@ Actions are stored in SQLite (`infrastructure/action_store.py`), and every propo
 2. **One pending proposal per order and action**, enforced twice: by the service and by a partial unique index (`idx_action_one_pending`).
 3. **Execute once.** `action_executions(proposal_id)` is a primary key, and the order outcome is written in the same transaction. A second approval with a new key returns the executed proposal without running anything.
 4. **Re-check at approval.** Eligibility is checked again before executing; refunds are per item and priced by the server in integer cents, and refunded items cannot be refunded again.
+5. **The customer's reason is recorded.** Every proposal needs a reason of 3–500 characters, from the API and from the assistant, so the approver sees why the customer asked. For assistant proposals the server also checks that most of the reason's words came from the conversation's inputs (customer messages or agent questions). Words that only restate the request ("cancel my order") don't count. Without a grounded reason the proposal is dropped and the draft asks the customer why (`customer_reason_missing`). A live eval found gpt-4o-mini skipping this question when only the prompt asked for it.
 
 Tests cover concurrent approvals, two independent service instances sharing a database, and the database-level duplicate guard.
 
@@ -101,7 +102,7 @@ The loop is about 150 lines (`assistant.py`) over OpenAI's Chat Completions API.
 | Turn latency p50/p95 and model latency per call | User experience and provider health | `assistant_requests.duration_ms`, `llm_calls.duration_ms` |
 | Tokens and cost per turn, per model | Budget and prompt regressions | `llm_calls.input_tokens/output_tokens` |
 | Tool error rate by tool and code | Backend health; `tool_failure` spikes | trace steps, `tool_call` logs |
-| Guardrail rates: `required_check_missing`, `clarification_required`, `existence_masked`, `invalid_structured_output` | Model drift and prompt regressions | trace steps |
+| Guardrail rates: `required_check_missing`, `clarification_required`, `existence_masked`, `customer_reason_missing`, `invalid_structured_output` | Model drift and prompt regressions | trace steps |
 | Authorization denials (`not_found` on out-of-scope lookups), login failures, lockouts | Security signal: probing or misconfiguration | logs, `login_failed` |
 | Proposals created vs approved vs rejected; time to decision | Quality of suggestions; approver workload | `action_proposals`, audit |
 | Duplicate-prevention hits (idempotent replays, 409s) | Client retry storms | action logs |

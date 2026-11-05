@@ -85,7 +85,12 @@ def run_case(case: dict[str, object]) -> None:
     elif case_type == "approval":
         actions = ActionService(tools)
         result = actions.propose(
-            case["action_type"], case["order_id"], None, "eval-proposal-key-001", agent
+            case["action_type"],
+            case["order_id"],
+            None,
+            "eval-proposal-key-001",
+            agent,
+            reason="Customer reported the item damaged.",
         )
         assert result["status"] == case["expected_status"], result
         assert result["execution"] is None, result
@@ -94,7 +99,12 @@ def run_case(case: dict[str, object]) -> None:
         actions = ActionService(tools)
         approver = tools.authenticator.authenticate("Bearer approver-one-secret")
         proposal = actions.propose(
-            case["action_type"], case["order_id"], None, "eval-proposal-key-002", agent
+            case["action_type"],
+            case["order_id"],
+            None,
+            "eval-proposal-key-002",
+            agent,
+            reason="Customer reported the item damaged.",
         )
         first = actions.decide(
             proposal["proposal_id"], "approve", "eval-decision-key-001", approver

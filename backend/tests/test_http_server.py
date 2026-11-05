@@ -160,7 +160,21 @@ class HttpServerTests(unittest.TestCase):
                 "idempotency_key": "http-proposal-key-01",
             },
         )
+        # The approver must see why the customer asked, so a proposal without a reason fails.
+        self.assertEqual((status, proposed["error"]["code"]), (400, "invalid_argument"))
+        status, proposed = self.request(
+            "POST",
+            "/actions/propose",
+            {
+                "action_type": "refund",
+                "order_id": "ord-5001",
+                "details": {"item_ids": ["item-9002"]},
+                "idempotency_key": "http-proposal-key-01",
+                "reason": "The filter box arrived crushed.",
+            },
+        )
         self.assertEqual((status, proposed["result"]["status"]), (200, "pending_approval"))
+        self.assertEqual(proposed["result"]["reason"], "The filter box arrived crushed.")
         proposal_id = proposed["result"]["proposal_id"]
         approver = {"Authorization": "Bearer approver-one-secret"}
         status, queue = self.request("GET", "/actions?status=pending_approval", headers=approver)

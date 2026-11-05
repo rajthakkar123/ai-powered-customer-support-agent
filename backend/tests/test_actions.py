@@ -48,7 +48,9 @@ class ActionServiceTests(unittest.TestCase):
         self.approver = self.tools.authenticator.authenticate("Bearer approver-one-secret")
 
     def propose_refund(self, key: str = "proposal-key-0001") -> dict[str, object]:
-        return self.actions.propose("refund", "ord-5001", None, key, self.agent)
+        return self.actions.propose(
+            "refund", "ord-5001", None, key, self.agent, reason="Customer reason for the test."
+        )
 
     def test_refund_proposal_waits_for_distinct_human_approval(self) -> None:
         proposal = self.propose_refund()
@@ -107,12 +109,22 @@ class ActionServiceTests(unittest.TestCase):
         self.assertEqual(first["proposal_id"], replay["proposal_id"])
         with self.assertRaises(ConflictError):
             self.actions.propose(
-                "order_change", "ord-5001", {"operation": "cancel"}, "proposal-key-0001", self.agent
+                "order_change",
+                "ord-5001",
+                {"operation": "cancel"},
+                "proposal-key-0001",
+                self.agent,
+                reason="Customer reason for the test.",
             )
 
     def test_refund_is_priced_per_item_in_cents_on_the_server(self) -> None:
         damaged_only = self.actions.propose(
-            "refund", "ord-5001", {"item_ids": ["item-9002"]}, "proposal-key-0010", self.agent
+            "refund",
+            "ord-5001",
+            {"item_ids": ["item-9002"]},
+            "proposal-key-0010",
+            self.agent,
+            reason="Customer reason for the test.",
         )
         self.assertEqual(
             damaged_only["details"],
@@ -126,12 +138,22 @@ class ActionServiceTests(unittest.TestCase):
         ):
             with self.subTest(details=bad_details), self.assertRaises(ValidationError):
                 self.actions.propose(
-                    "refund", "ord-5001", bad_details, "proposal-key-0011", self.agent
+                    "refund",
+                    "ord-5001",
+                    bad_details,
+                    "proposal-key-0011",
+                    self.agent,
+                    reason="Customer reason for the test.",
                 )
 
     def test_approved_refund_changes_the_order_and_its_eligibility(self) -> None:
         partial = self.actions.propose(
-            "refund", "ord-5001", {"item_ids": ["item-9002"]}, "proposal-key-0012", self.agent
+            "refund",
+            "ord-5001",
+            {"item_ids": ["item-9002"]},
+            "proposal-key-0012",
+            self.agent,
+            reason="Customer reason for the test.",
         )
         self.actions.decide(partial["proposal_id"], "approve", "decision-key-0012", self.approver)
         order = self.tools.get_order_details("ord-5001", self.agent)
@@ -143,9 +165,21 @@ class ActionServiceTests(unittest.TestCase):
         self.assertEqual(eligibility["refundable_item_ids"], ["item-9001"])
         with self.assertRaises(ConflictError):
             self.actions.propose(
-                "refund", "ord-5001", {"item_ids": ["item-9002"]}, "proposal-key-0013", self.agent
+                "refund",
+                "ord-5001",
+                {"item_ids": ["item-9002"]},
+                "proposal-key-0013",
+                self.agent,
+                reason="Customer reason for the test.",
             )
-        rest = self.actions.propose("refund", "ord-5001", None, "proposal-key-0014", self.agent)
+        rest = self.actions.propose(
+            "refund",
+            "ord-5001",
+            None,
+            "proposal-key-0014",
+            self.agent,
+            reason="Customer reason for the test.",
+        )
         self.assertEqual(rest["details"]["amount_cents"], 5999)
         self.actions.decide(rest["proposal_id"], "approve", "decision-key-0014", self.approver)
         refunded = self.tools.check_return_eligibility("ord-5001", "refund", self.agent)
@@ -154,7 +188,12 @@ class ActionServiceTests(unittest.TestCase):
 
     def test_approved_cancellation_cancels_the_order(self) -> None:
         proposal = self.actions.propose(
-            "order_change", "ord-5005", {"operation": "cancel"}, "proposal-key-0015", self.agent
+            "order_change",
+            "ord-5005",
+            {"operation": "cancel"},
+            "proposal-key-0015",
+            self.agent,
+            reason="Customer reason for the test.",
         )
         self.actions.decide(proposal["proposal_id"], "approve", "decision-key-0015", self.approver)
         self.assertEqual(
@@ -162,7 +201,12 @@ class ActionServiceTests(unittest.TestCase):
         )
         with self.assertRaises(ConflictError):
             self.actions.propose(
-                "order_change", "ord-5005", {"operation": "cancel"}, "proposal-key-0016", self.agent
+                "order_change",
+                "ord-5005",
+                {"operation": "cancel"},
+                "proposal-key-0016",
+                self.agent,
+                reason="Customer reason for the test.",
             )
 
     def test_rejected_proposal_never_executes(self) -> None:
@@ -176,12 +220,24 @@ class ActionServiceTests(unittest.TestCase):
 
     def test_ineligible_refund_cannot_be_proposed(self) -> None:
         with self.assertRaises(ConflictError):
-            self.actions.propose("refund", "ord-5002", None, "proposal-key-0002", self.agent)
+            self.actions.propose(
+                "refund",
+                "ord-5002",
+                None,
+                "proposal-key-0002",
+                self.agent,
+                reason="Customer reason for the test.",
+            )
 
     def test_order_change_is_also_gated_by_approval(self) -> None:
         agent_two = self.tools.authenticator.authenticate("Bearer agent-two-secret")
         proposal = self.actions.propose(
-            "order_change", "ord-5003", {"operation": "cancel"}, "proposal-key-0003", agent_two
+            "order_change",
+            "ord-5003",
+            {"operation": "cancel"},
+            "proposal-key-0003",
+            agent_two,
+            reason="Customer reason for the test.",
         )
         self.assertEqual(proposal["status"], "pending_approval")
         approved = self.actions.decide(
@@ -191,7 +247,14 @@ class ActionServiceTests(unittest.TestCase):
 
     def test_cross_customer_proposal_and_lookup_are_denied(self) -> None:
         with self.assertRaises(NotFoundError):
-            self.actions.propose("refund", "ord-5003", None, "proposal-key-0004", self.agent)
+            self.actions.propose(
+                "refund",
+                "ord-5003",
+                None,
+                "proposal-key-0004",
+                self.agent,
+                reason="Customer reason for the test.",
+            )
         proposal = self.propose_refund()
         agent_two = self.tools.authenticator.authenticate("Bearer agent-two-secret")
         with self.assertRaises(NotFoundError):
@@ -211,7 +274,12 @@ class ActionServiceTests(unittest.TestCase):
         self.assertTrue(refund["created_at"])
         agent_two = self.tools.authenticator.authenticate("Bearer agent-two-secret")
         cancel = self.actions.propose(
-            "order_change", "ord-5003", {"operation": "cancel"}, "proposal-key-0007", agent_two
+            "order_change",
+            "ord-5003",
+            {"operation": "cancel"},
+            "proposal-key-0007",
+            agent_two,
+            reason="Customer reason for the test.",
         )
         self.assertEqual(cancel["source"], "agent")
         queue = self.actions.list_proposals(self.approver, "pending_approval")
@@ -249,18 +317,51 @@ class ActionServiceTests(unittest.TestCase):
 
     def test_idempotency_key_must_be_well_formed(self) -> None:
         with self.assertRaises(ValidationError):
-            self.actions.propose("refund", "ord-5001", None, "tiny", self.agent)
+            self.actions.propose(
+                "refund",
+                "ord-5001",
+                None,
+                "tiny",
+                self.agent,
+                reason="Customer reason for the test.",
+            )
+
+    def test_every_proposal_records_the_customers_reason(self) -> None:
+        for reason in (None, "", "   ", "ok", 42, "x" * 501):
+            with self.subTest(reason=reason), self.assertRaises(ValidationError):
+                self.actions.propose(
+                    "order_change",
+                    "ord-5005",
+                    {"operation": "cancel"},
+                    "proposal-key-0020",
+                    self.agent,
+                    reason=reason,
+                )
+        proposal = self.actions.propose(
+            "order_change",
+            "ord-5005",
+            {"operation": "cancel"},
+            "proposal-key-0020",
+            self.agent,
+            reason="  Ordered the wrong size.  ",
+        )
+        self.assertEqual(proposal["reason"], "Ordered the wrong size.")
 
     def test_action_api_boundary_reports_pending_and_requires_auth(self) -> None:
+        body = {
+            "action_type": "refund",
+            "order_id": "ord-5001",
+            "idempotency_key": "proposal-key-0005",
+        }
+        status, payload, _ = execute_action_request(
+            self.actions, "Bearer agent-one-secret", "propose", body
+        )
+        self.assertEqual((status, payload["error"]["code"]), (400, "invalid_argument"))
         status, payload, request_id = execute_action_request(
             self.actions,
             "Bearer agent-one-secret",
             "propose",
-            {
-                "action_type": "refund",
-                "order_id": "ord-5001",
-                "idempotency_key": "proposal-key-0005",
-            },
+            {**body, "reason": "Arrived damaged."},
         )
         self.assertEqual(status, 200)
         self.assertEqual(payload["request_id"], request_id)
@@ -298,6 +399,7 @@ class ApproverRoutingTests(unittest.TestCase):
             {"item_ids": ["item-9002"]},
             key,
             self.agent,
+            reason="The filter box arrived crushed.",
             approver_id=approver_id,
         )
 
@@ -381,6 +483,7 @@ class ApproverRoutingTests(unittest.TestCase):
                 "routing-key-000002",
                 approver_as_proposer,
                 approver_id="approver-001",
+                reason="Customer reason for the test.",
             )
 
 

@@ -185,7 +185,12 @@ class SupportDatabaseTests(unittest.TestCase):
         tools = self.database_tools()
         service = ActionService(tools, SqliteActionRepository(self.database))
         proposal = service.propose(
-            "refund", "ord-5001", None, "refund-idempotency-001", self.principal
+            "refund",
+            "ord-5001",
+            None,
+            "refund-idempotency-001",
+            self.principal,
+            reason="Customer reason for the test.",
         )
         approver = Principal("approver-001", "support_approver", self.principal.customer_ids)
         restored = ActionService(tools, SqliteActionRepository(self.database))
@@ -214,15 +219,34 @@ class SupportDatabaseTests(unittest.TestCase):
         approver = Principal("approver-001", "support_approver", self.principal.customer_ids)
         worker_a = ActionService(tools, SqliteActionRepository(self.database))
         worker_b = ActionService(tools, SqliteActionRepository(self.database))
-        proposal = worker_a.propose("refund", "ord-5001", None, "refund-key-000001", self.principal)
+        proposal = worker_a.propose(
+            "refund",
+            "ord-5001",
+            None,
+            "refund-key-000001",
+            self.principal,
+            reason="Customer reason for the test.",
+        )
         self.assertEqual(
-            worker_b.propose("refund", "ord-5001", None, "refund-key-000001", self.principal)[
-                "proposal_id"
-            ],
+            worker_b.propose(
+                "refund",
+                "ord-5001",
+                None,
+                "refund-key-000001",
+                self.principal,
+                reason="Customer reason for the test.",
+            )["proposal_id"],
             proposal["proposal_id"],
         )
         with self.assertRaises(ConflictError):
-            worker_b.propose("refund", "ord-5001", None, "refund-key-000002", self.principal)
+            worker_b.propose(
+                "refund",
+                "ord-5001",
+                None,
+                "refund-key-000002",
+                self.principal,
+                reason="Customer reason for the test.",
+            )
         worker_a.decide(proposal["proposal_id"], "approve", "decision-key-000001", approver)
         second = worker_b.decide(
             proposal["proposal_id"], "approve", "decision-key-000002", approver
@@ -232,7 +256,12 @@ class SupportDatabaseTests(unittest.TestCase):
         self.assertEqual(SqliteActionRepository(self.database).execution_count(), 1)
         # Another worker's proposals are never wiped by a save, unlike the old full rewrite.
         worker_b.propose(
-            "order_change", "ord-5005", {"operation": "cancel"}, "cancel-key-000001", self.principal
+            "order_change",
+            "ord-5005",
+            {"operation": "cancel"},
+            "cancel-key-000001",
+            self.principal,
+            reason="Customer reason for the test.",
         )
         self.assertEqual(len(worker_a.list_proposals(approver)), 2)
 
@@ -241,7 +270,14 @@ class SupportDatabaseTests(unittest.TestCase):
     ) -> None:
         repository = SqliteActionRepository(self.database)
         service = ActionService(self.database_tools(), repository)
-        proposal = service.propose("refund", "ord-5001", None, "refund-key-000003", self.principal)
+        proposal = service.propose(
+            "refund",
+            "ord-5001",
+            None,
+            "refund-key-000003",
+            self.principal,
+            reason="Customer reason for the test.",
+        )
         duplicate = {**proposal, "proposal_id": "00000000-0000-4000-8000-000000000001"}
         with self.assertRaises(ConflictError), repository.transaction() as tx:
             tx.insert(duplicate)
@@ -251,7 +287,12 @@ class SupportDatabaseTests(unittest.TestCase):
         service = ActionService(tools, SqliteActionRepository(self.database))
         approver = Principal("approver-001", "support_approver", self.principal.customer_ids)
         proposal = service.propose(
-            "order_change", "ord-5005", {"operation": "cancel"}, "cancel-key-000003", self.principal
+            "order_change",
+            "ord-5005",
+            {"operation": "cancel"},
+            "cancel-key-000003",
+            self.principal,
+            reason="Customer reason for the test.",
         )
         service.decide(proposal["proposal_id"], "approve", "decision-key-000004", approver)
         store = ConversationStore(self.database)
@@ -287,7 +328,12 @@ class SupportDatabaseTests(unittest.TestCase):
         service = ActionService(tools, SqliteActionRepository(self.database))
         approver = Principal("approver-001", "support_approver", self.principal.customer_ids)
         proposal = service.propose(
-            "order_change", "ord-5005", {"operation": "cancel"}, "cancel-key-000002", self.principal
+            "order_change",
+            "ord-5005",
+            {"operation": "cancel"},
+            "cancel-key-000002",
+            self.principal,
+            reason="Customer reason for the test.",
         )
         service.decide(proposal["proposal_id"], "approve", "decision-key-000003", approver)
         self.database.sync_sample_data()

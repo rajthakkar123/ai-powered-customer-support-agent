@@ -150,7 +150,7 @@ class SupportAssistantTests(unittest.TestCase):
                         "action_type": "refund",
                         "order_id": "ord-5001",
                         "item_ids": ["item-9002"],
-                        "reason": "Damaged on arrival and within the return window.",
+                        "reason": "The filter box arrived crushed.",
                     },
                 ),
             ]
@@ -166,9 +166,7 @@ class SupportAssistantTests(unittest.TestCase):
             result["proposal"]["details"],
             {"item_ids": ["item-9002"], "amount_cents": 2999, "currency": "USD"},
         )
-        self.assertEqual(
-            result["proposal"]["reason"], "Damaged on arrival and within the return window."
-        )
+        self.assertEqual(result["proposal"]["reason"], "The filter box arrived crushed.")
         self.assertEqual(result["proposal"]["source"], "assistant")
         tools_called = [step["tool"] for step in result["trace"] if step["kind"] == "tool"]
         self.assertEqual(tools_called, ["get_order_details", "check_return_eligibility"])
@@ -205,12 +203,12 @@ class SupportAssistantTests(unittest.TestCase):
                         "action_type": "refund",
                         "order_id": "ord-5002",
                         "item_ids": [],
-                        "reason": "Customer asked.",
+                        "reason": "The kettle stopped heating.",
                     },
                 ),
             ]
         )
-        result = self.ask_customer(assistant, "Refund ord-5002 please.")
+        result = self.ask_customer(assistant, "Refund ord-5002 please, the kettle stopped heating.")
         self.assertIsNone(result["proposal"])
         self.assertIn("return window has expired", result["proposal_blocked"]["reason"])
         self.assertEqual(result["trace"][-1]["status"], "blocked")
@@ -221,7 +219,7 @@ class SupportAssistantTests(unittest.TestCase):
             "action_type": "refund",
             "order_id": "ord-5001",
             "item_ids": [],
-            "reason": "Damaged.",
+            "reason": "Arrived broken.",
         }
         responses = []
         for _ in range(2):
@@ -411,6 +409,70 @@ class SupportAssistantTests(unittest.TestCase):
         self.assertFalse(result["needs_clarification"])
         self.assertEqual(result["trace"][1]["status"], "not_found")
         self.assertEqual(result["answer"], "I couldn't find order ord-9999.")
+
+    def test_no_proposal_while_still_asking_the_customer_for_their_reason(self) -> None:
+        assistant = self.assistant(
+            [
+                tool_response("check_cancellation_eligibility", {"order_id": "ord-5005"}),
+                final_response(
+                    intent="order_change",
+                    needs_clarification=True,
+                    suggested_reply="I can cancel ord-5005. May I ask why you'd like to cancel?",
+                    proposed_action={
+                        "action_type": "order_change",
+                        "order_id": "ord-5005",
+                        "item_ids": [],
+                        "reason": "Not given yet.",
+                    },
+                ),
+            ]
+        )
+        result = self.ask_customer(assistant, "Please cancel ord-5005.")
+        self.assertIsNone(result["proposal"])
+        self.assertIn("why", result["answer"])
+        self.assertEqual(self.actions.repository.all(), [])
+        self.assertIn("awaiting_clarification", [step.get("reason") for step in result["trace"]])
+
+    def test_a_reason_the_customer_never_gave_is_not_proposed(self) -> None:
+        cancel = {"action_type": "order_change", "order_id": "ord-5005", "item_ids": []}
+        responses = []
+        for reason in ("Customer requested a cancellation.", "The customer changed their mind."):
+            responses += [
+                tool_response("check_cancellation_eligibility", {"order_id": "ord-5005"}),
+                final_response(
+                    intent="order_change",
+                    suggested_reply="Your cancellation is being reviewed.",
+                    proposed_action={**cancel, "reason": reason},
+                ),
+            ]
+        responses += [
+            tool_response("check_cancellation_eligibility", {"order_id": "ord-5005"}),
+            final_response(
+                intent="order_change",
+                suggested_reply="Your cancellation is being reviewed.",
+                proposed_action={**cancel, "reason": "Found the filters cheaper elsewhere."},
+            ),
+        ]
+        assistant = self.assistant(responses)
+        # Restating the request is not a reason, and neither is one the model made up.
+        first = self.ask_customer(assistant, "Please cancel order ord-5005.")
+        second = assistant.ask(
+            "Can you cancel it?", None, first["conversation_id"], self.agent, "customer_message"
+        )
+        for result in (first, second):
+            self.assertIsNone(result["proposal"])
+            self.assertTrue(result["needs_clarification"])
+            self.assertIn("why you'd like to cancel", result["answer"])
+            self.assertEqual(result["trace"][-1]["reason"], "customer_reason_missing")
+        # Once the customer says why, earlier turns included, the proposal records it.
+        third = assistant.ask(
+            "I found the same filters cheaper somewhere else.",
+            None,
+            first["conversation_id"],
+            self.agent,
+            "customer_message",
+        )
+        self.assertEqual(third["proposal"]["reason"], "Found the filters cheaper elsewhere.")
 
     def test_out_of_scope_request_uses_no_tools_and_cannot_propose(self) -> None:
         assistant = self.assistant(
