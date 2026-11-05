@@ -70,7 +70,13 @@ TURN_SCHEMA: dict[str, object] = {
                                 "refundable item. Always empty for order_change."
                             ),
                         },
-                        "reason": {"type": "string"},
+                        "reason": {
+                            "type": "string",
+                            "description": (
+                                "Why the customer wants this, briefly and in their words. "
+                                "Only propose once they have said why."
+                            ),
+                        },
                     },
                     "required": ["action_type", "order_id", "item_ids", "reason"],
                     "additionalProperties": False,

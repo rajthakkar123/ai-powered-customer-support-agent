@@ -18,7 +18,7 @@ from ..domain.errors import (
     ValidationError,
 )
 from ..infrastructure.database import SupportDatabase
-from .auth import Principal
+from .auth import SUPPORT_ROLES, Principal
 from .passwords import PasswordHasher
 
 LOGGER = logging.getLogger("support_agent")
@@ -164,6 +164,26 @@ class AccountService:
     def list_accounts(self, principal: Principal) -> list[dict[str, Any]]:
         self._require_admin(principal)
         return [_public_account(account) for account in self.database.list_staff_accounts()]
+
+    def list_approvers(self, principal: Principal) -> list[dict[str, Any]]:
+        """Active approvers, for routing a proposal; only names and emails are exposed."""
+        if principal.role not in SUPPORT_ROLES:
+            raise ForbiddenError("A support workspace session is required.")
+        return [
+            {key: account[key] for key in ("user_id", "display_name", "email")}
+            for account in self.database.list_staff_accounts()
+            if account["role"] == "support_approver" and account["active"]
+        ]
+
+    def find_approver(self, user_id: str) -> dict[str, Any] | None:
+        """The active approver with this ID, or None; used to validate proposal routing."""
+        account = next(
+            (item for item in self.database.list_staff_accounts() if item["user_id"] == user_id),
+            None,
+        )
+        if account is None or account["role"] != "support_approver" or not account["active"]:
+            return None
+        return {key: account[key] for key in ("user_id", "display_name", "email")}
 
     def reset_password(self, email: str, password: str) -> None:
         """Operator recovery path: set a password, clear lockout, and end existing sessions."""

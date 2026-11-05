@@ -70,11 +70,16 @@ class SupportToolTests(unittest.TestCase):
 
     def test_customer_lookup_returns_order_and_conversation_context(self) -> None:
         customer = self.tools.call("get_customer_details", {"customer_id": "cus-1001"}, self.agent)
-        self.assertEqual(customer["orders"], ["ord-5005", "ord-5001", "ord-5002"])
+        # Newest first; summaries line up with the ID list and carry the order's status.
+        dates = [order["ordered_at"] for order in customer["order_summaries"]]
+        self.assertEqual(dates, sorted(dates, reverse=True))
         self.assertEqual(
-            [(order["order_id"], order["status"]) for order in customer["order_summaries"]],
-            [("ord-5005", "processing"), ("ord-5001", "delivered"), ("ord-5002", "delivered")],
+            customer["orders"], [order["order_id"] for order in customer["order_summaries"]]
         )
+        self.assertTrue({"ord-5001", "ord-5002", "ord-5005", "ord-5101"} <= set(customer["orders"]))
+        self.assertNotIn("ord-5003", customer["orders"])
+        summaries = {order["order_id"]: order for order in customer["order_summaries"]}
+        self.assertEqual(summaries["ord-5005"]["status"], "processing")
         self.assertEqual(customer["conversations"][0]["conversation_id"], "conv-7001")
 
     def test_policy_tool_returns_fixture_policy_facts(self) -> None:
@@ -117,6 +122,30 @@ class SupportToolTests(unittest.TestCase):
         self.assertEqual(cancelled["reasons"], ["The order is already cancelled."])
         with self.assertRaises(NotFoundError):
             self.tools.call("check_cancellation_eligibility", {"order_id": "ord-5003"}, self.agent)
+
+    def test_manual_test_orders_cover_the_policy_edges(self) -> None:
+        # The 30-day window ends on 2026-11-04 for an order delivered 2026-10-05 (still open),
+        # and on 2026-11-03 for one delivered a day earlier (closed).
+        eligibility = {
+            order_id: self.tools.check_return_eligibility(order_id, "refund", self.agent)
+            for order_id in ("ord-5101", "ord-5102", "ord-5103", "ord-5104", "ord-5105", "ord-5106")
+        }
+        self.assertTrue(eligibility["ord-5102"]["eligible"])
+        self.assertEqual(eligibility["ord-5102"]["policy"]["deadline"], "2026-11-04")
+        self.assertIn("The return window has expired.", eligibility["ord-5103"]["reasons"])
+        self.assertIn("Order has not been delivered.", eligibility["ord-5104"]["reasons"])
+        self.assertEqual(eligibility["ord-5105"]["refundable_item_ids"], ["item-9107", "item-9108"])
+        self.assertIn(
+            "Every item in this order has already been refunded.",
+            eligibility["ord-5106"]["reasons"],
+        )
+        self.assertEqual(
+            [item["amount_cents"] for item in eligibility["ord-5101"]["refundable_items"]],
+            [12900, 4800],
+        )
+        self.assertTrue(
+            self.tools.check_cancellation_eligibility("ord-5104", self.agent)["eligible"]
+        )
 
     def test_identifiers_must_carry_their_own_prefix(self) -> None:
         for name, arguments in (

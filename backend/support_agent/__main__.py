@@ -61,7 +61,7 @@ def main() -> None:
     port = int(os.environ.get("SUPPORT_PORT", "8000"))
     model_client = OpenAIChatClient.from_environment()
     conversations = ConversationStore(database)
-    actions = ActionService(tools, SqliteActionRepository(database))
+    actions = ActionService(tools, SqliteActionRepository(database), approvers=accounts)
     traces = TraceStore(database)
     assistant = (
         SupportAssistant(tools, model_client, conversations, actions, traces=traces)

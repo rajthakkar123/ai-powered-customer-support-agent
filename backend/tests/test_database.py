@@ -9,6 +9,7 @@ from support_agent.api.http import execute_customer_list
 from support_agent.application.actions import ActionService
 from support_agent.application.conversations import ConversationStore
 from support_agent.application.tools import SupportTools
+from support_agent.domain import fixtures
 from support_agent.domain.errors import ConflictError
 from support_agent.infrastructure.action_store import SqliteActionRepository
 from support_agent.infrastructure.database import SupportDatabase
@@ -39,7 +40,13 @@ class SupportDatabaseTests(unittest.TestCase):
             messages = connection.execute("SELECT COUNT(*) FROM conversation_messages").fetchone()[
                 0
             ]
-        self.assertEqual((customers, orders, line_items, messages), (3, 5, 6, 3))
+        expected = (
+            len(fixtures.CUSTOMERS),
+            len(fixtures.ORDERS),
+            sum(len(order["item_ids"]) for order in fixtures.ORDERS.values()),
+            sum(len(conversation["messages"]) for conversation in fixtures.CONVERSATIONS.values()),
+        )
+        self.assertEqual((customers, orders, line_items, messages), expected)
 
     def test_tools_read_order_and_policy_facts_from_sqlite(self) -> None:
         tools = SupportTools(
@@ -238,6 +245,42 @@ class SupportDatabaseTests(unittest.TestCase):
         duplicate = {**proposal, "proposal_id": "00000000-0000-4000-8000-000000000001"}
         with self.assertRaises(ConflictError), repository.transaction() as tx:
             tx.insert(duplicate)
+
+    def test_reset_test_activity_restores_orders_and_keeps_accounts(self) -> None:
+        tools = self.database_tools()
+        service = ActionService(tools, SqliteActionRepository(self.database))
+        approver = Principal("approver-001", "support_approver", self.principal.customer_ids)
+        proposal = service.propose(
+            "order_change", "ord-5005", {"operation": "cancel"}, "cancel-key-000003", self.principal
+        )
+        service.decide(proposal["proposal_id"], "approve", "decision-key-000004", approver)
+        store = ConversationStore(self.database)
+        conversation_id, _, history = store.open(None, self.principal, "cus-1001")
+        store.save(conversation_id, history)
+        self.database.insert_staff_account(
+            {
+                "user_id": "agent-keep",
+                "email": "keep@northstar.test",
+                "display_name": "Keep Me",
+                "role": "support_agent",
+                "password_hash": "scrypt$x",
+                "customer_ids": [],
+                "active": True,
+                "created_by": None,
+                "created_at": "2026-11-05",
+            }
+        )
+        removed = self.database.reset_test_activity()
+        self.assertEqual(removed["action_proposals"], 1)
+        self.assertEqual(removed["assistant_conversations"], 1)
+        self.assertEqual(
+            tools.get_order_details("ord-5005", self.principal)["status"], "processing"
+        )
+        self.assertIsNotNone(self.database.staff_account_by_email("keep@northstar.test"))
+        self.assertEqual(self.database.conversation_customer("conv-7001", "anyone"), None)
+        self.assertEqual(
+            len(tools.get_customer_details("cus-1001", self.principal)["conversations"]), 1
+        )
 
     def test_approved_outcomes_survive_sample_data_resync(self) -> None:
         tools = self.database_tools()

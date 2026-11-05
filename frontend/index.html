@@ -14,7 +14,7 @@
       <header class="topbar">
         <a class="brand" href="/" aria-label="Northstar Support home">
           <span class="brand-mark" aria-hidden="true">N</span>
-          <span class="brand-copy"><strong>northstar</strong><small>SUPPORT</small></span>
+          <span class="brand-copy"><strong>northstar</strong><small>Support</small></span>
         </a>
         <div class="workspace-label"><span class="workspace-dot"></span> Support workspace <span class="topbar-separator">/</span> <span>Inbox</span></div>
         <div class="topbar-actions">
@@ -26,8 +26,7 @@
 
       <div class="workspace">
         <aside class="sidebar" aria-label="Support navigation">
-          <div class="sidebar-section-label">WORKSPACE</div>
-          <nav class="primary-nav">
+          <nav class="primary-nav" aria-label="Workspace">
             <a class="nav-item active" href="#inbox" data-page="inbox"><span class="nav-icon">▤</span>Inbox</a>
             <a class="nav-item" href="#customers" data-page="customers"><span class="nav-icon">♙</span>Customers</a>
             <a class="nav-item" href="#orders" data-page="orders"><span class="nav-icon">▣</span>Orders</a>
@@ -36,31 +35,20 @@
             <a id="teamNav" class="nav-item" href="#team" data-page="team" hidden><span class="nav-icon">⚇</span>Team</a>
           </nav>
 
-          <div class="sidebar-divider"></div>
           <div class="sidebar-list-heading">
-            <span>YOUR QUEUE</span>
+            <span>Your queue</span>
             <span id="customerCount" class="tiny-count">—</span>
           </div>
           <div id="customerList" class="customer-list">
-            <div class="sidebar-empty">Connect to load your<br />authorized customers.</div>
+            <div class="sidebar-empty">Sign in to see the customers assigned to you.</div>
           </div>
 
           <div class="sidebar-bottom">
-            <div class="help-card">
-              <span class="help-icon">✦</span>
-              <div><strong>AI copilot</strong><small>Grounded in your support data</small></div>
-              <span class="live-dot"></span>
-            </div>
             <div class="sidebar-user"><div id="sidebarAvatar" class="profile-avatar small">—</div><div><strong id="sidebarUserName">Signed out</strong><small id="agentLabel">Not connected</small></div><button id="signOutButton" class="more-button sign-out-button" type="button" aria-label="Sign out" title="Sign out" hidden>⏻</button></div>
           </div>
         </aside>
 
         <main class="conversation-column" id="inbox">
-          <div class="page-heading">
-            <div><div class="eyebrow">CUSTOMER CARE</div><h1>Inbox</h1></div>
-            <button class="outline-button" id="refreshButton" type="button"><span aria-hidden="true">↻</span> Refresh</button>
-          </div>
-
           <div id="emptyWorkspace" class="empty-workspace">
             <div class="empty-illustration"><span>✦</span><i></i><b></b></div>
             <h2>Your support desk, at a glance</h2>
@@ -74,7 +62,7 @@
                 <div id="conversationAvatar" class="customer-avatar">—</div>
                 <div><h2 id="conversationCustomerName">Select a customer</h2><p id="conversationCustomerMeta">Customer conversation</p></div>
               </div>
-              <div class="conversation-header-actions"><span class="status-pill"><i></i> Open</span><button id="newConversationButton" class="outline-button compact" type="button" title="Start a fresh thread with this customer">New conversation</button></div>
+              <div class="conversation-header-actions"><button id="refreshButton" class="icon-button subtle" type="button" aria-label="Reload this customer" title="Reload this customer">↻</button><button id="newConversationButton" class="outline-button" type="button" title="Start a fresh thread with this customer">New conversation</button></div>
             </div>
 
             <div id="messageList" class="message-list" aria-live="polite"></div>
@@ -93,33 +81,32 @@
               </div>
               <label class="sr-only" for="messageInput">Message text</label>
               <textarea id="messageInput" rows="2" maxlength="4000" placeholder="Type what the customer wrote, e.g. “My order arrived damaged…”" disabled></textarea>
-              <div class="composer-footer"><div id="composerHint" class="composer-hint"><span class="hint-star">✦</span> Simulates an incoming customer message <span class="hint-divider">·</span> The copilot drafts a reply for you to review</div><button id="sendButton" class="send-button" type="submit" disabled><span id="sendLabel">Simulate message</span> <span>↑</span></button></div>
+              <div class="composer-footer"><div id="composerHint" class="composer-hint">Simulates an incoming customer message. The copilot drafts a reply for you to review.</div><button id="sendButton" class="send-button" type="submit" disabled><span id="sendLabel">Simulate message</span></button></div>
             </form>
-            <div class="privacy-note"><span>◈</span> Customer data is scoped to your authorized account</div>
           </section>
 
           <section id="customersPage" class="workspace-page" hidden>
-            <div class="page-heading"><div><div class="eyebrow">CUSTOMER DIRECTORY</div><h1>Customers</h1></div><input id="customerSearch" class="directory-search" type="search" placeholder="Search name, email, or ID" aria-label="Search customers" /></div>
+            <div class="page-heading"><div><h1>Customers</h1></div><input id="customerSearch" class="directory-search" type="search" placeholder="Search name, email, or ID" aria-label="Search customers" /></div>
             <div class="directory-content"><p class="directory-intro">Only customer accounts in your authorized scope are shown.</p><div id="customerDirectoryList" class="directory-list"></div></div>
           </section>
 
           <section id="ordersPage" class="workspace-page" hidden>
-            <div class="page-heading"><div><div class="eyebrow">ORDER WORKSPACE</div><h1>Orders</h1></div><span id="ordersCustomerLabel" class="directory-context">Choose a customer first</span></div>
+            <div class="page-heading"><div><h1>Orders</h1></div><span id="ordersCustomerLabel" class="directory-context">Choose a customer first</span></div>
             <div id="ordersDirectoryList" class="directory-content"></div>
           </section>
 
           <section id="knowledgePage" class="workspace-page" hidden>
-            <div class="page-heading"><div><div class="eyebrow">VERIFIED BUSINESS RULES</div><h1>Knowledge base</h1></div><button id="refreshPoliciesButton" class="outline-button" type="button">Refresh policies</button></div>
+            <div class="page-heading"><div><h1>Knowledge base</h1></div><button id="refreshPoliciesButton" class="outline-button" type="button">Refresh policies</button></div>
             <div id="policyDirectoryList" class="directory-content policy-directory"><p class="directory-intro">Sign in to load current return, refund, shipping, and support policies.</p></div>
           </section>
 
           <section id="approvalsPage" class="workspace-page" hidden>
-            <div class="page-heading"><div><div class="eyebrow">HUMAN APPROVAL</div><h1>Approvals</h1></div><div class="page-heading-actions"><select id="approvalStatusFilter" class="composer-select" aria-label="Filter proposals by status"><option value="pending_approval">Pending</option><option value="executed">Approved</option><option value="rejected">Rejected</option><option value="">All</option></select><button id="refreshApprovalsButton" class="outline-button" type="button"><span aria-hidden="true">↻</span> Refresh</button></div></div>
+            <div class="page-heading"><div><h1>Approvals</h1></div><div class="page-heading-actions"><select id="approvalStatusFilter" class="composer-select" aria-label="Filter proposals by status"><option value="pending_approval">Pending</option><option value="executed">Approved</option><option value="rejected">Rejected</option><option value="">All</option></select><button id="refreshApprovalsButton" class="outline-button" type="button"><span aria-hidden="true">↻</span> Refresh</button></div></div>
             <div class="directory-content"><p id="approvalsIntro" class="directory-intro"></p><div id="approvalList" class="directory-list"></div></div>
           </section>
 
           <section id="teamPage" class="workspace-page" hidden>
-            <div class="page-heading"><div><div class="eyebrow">ADMINISTRATION</div><h1>Team</h1></div><button id="refreshAccountsButton" class="outline-button" type="button"><span aria-hidden="true">↻</span> Refresh</button></div>
+            <div class="page-heading"><div><h1>Team</h1></div><button id="refreshAccountsButton" class="outline-button" type="button"><span aria-hidden="true">↻</span> Refresh</button></div>
             <div class="directory-content team-layout">
               <form id="accountForm" class="account-form">
                 <h2>Add a team member</h2>
@@ -142,43 +129,50 @@
           </section>
         </main>
 
-        <aside id="contextPanel" class="context-panel" aria-label="Customer context and tool activity">
-          <div class="context-heading"><div><div class="eyebrow">LIVE CONTEXT</div><h2>Customer details</h2></div><button id="contextRefreshButton" class="icon-button subtle" type="button" aria-label="Refresh customer details">↻</button></div>
-          <div id="contextEmpty" class="context-empty"><div class="context-empty-icon">◇</div><strong>No customer selected</strong><span>Choose someone from your queue to see their orders and support history.</span></div>
+        <aside id="contextPanel" class="context-panel" aria-label="Customer details">
+          <div class="panel-header">
+            <h2>Customer</h2>
+            <button id="contextRefreshButton" class="icon-button subtle" type="button" aria-label="Reload customer details" title="Reload customer details">↻</button>
+          </div>
+
+          <div id="contextEmpty" class="context-empty"><strong>No customer selected</strong><span>Choose someone from your queue to see their orders and support history.</span></div>
 
           <div id="customerContext" hidden>
-            <section class="context-section customer-card">
-              <div class="customer-card-top"><div id="contextAvatar" class="customer-avatar large">—</div><div class="customer-card-name"><h3 id="contextCustomerName">—</h3><span id="contextCustomerId" class="muted-mono">—</span></div></div>
-              <div class="customer-contact"><span>✉</span><span id="contextCustomerEmail">—</span></div>
-              <div class="customer-stats"><div><strong id="contextOrderCount">0</strong><span>Orders</span></div><div><strong id="contextHistoryCount">0</strong><span>Conversations</span></div><div><strong id="contextMemberSince">—</strong><span>Customer since</span></div></div>
+            <section class="customer-card">
+              <div class="customer-card-top">
+                <div id="contextAvatar" class="customer-avatar large">—</div>
+                <div class="customer-card-name"><h3 id="contextCustomerName">—</h3><span id="contextCustomerEmail">—</span></div>
+              </div>
+              <dl class="customer-facts">
+                <div><dt>Customer ID</dt><dd id="contextCustomerId">—</dd></div>
+                <div><dt>Customer since</dt><dd id="contextMemberSince">—</dd></div>
+                <div><dt>Orders</dt><dd id="contextOrderCount">0</dd></div>
+                <div><dt>Past conversations</dt><dd id="contextHistoryCount">0</dd></div>
+              </dl>
             </section>
 
             <section class="context-section">
-              <div class="section-heading"><h3>Recent orders</h3><span id="orderCountPill" class="tiny-count">0</span></div>
+              <div class="section-heading"><h3>Orders</h3><span id="orderCountPill" class="tiny-count">0</span></div>
               <div id="orderList" class="order-list"><div class="light-empty">No orders found.</div></div>
             </section>
 
             <section class="context-section selected-order-section">
               <div class="section-heading"><h3>Selected order</h3><span id="orderStatusBadge" class="order-status" hidden>—</span></div>
-              <div id="orderDetails" class="order-details"><div class="light-empty">Select an order to inspect its items and shipping.</div></div>
+              <div id="orderDetails" class="order-details"><div class="light-empty">Select an order to see its items and shipping.</div></div>
             </section>
 
             <section class="context-section action-section">
-              <div class="section-heading"><h3>Proposed actions</h3><span class="approval-lock">♙ Approval required</span></div>
+              <div class="section-heading"><h3>Actions</h3><span class="approval-lock">Needs an approver</span></div>
+              <label class="approver-route"><span>Send to</span><select id="approverSelect" aria-label="Approver who decides the proposal"><option value="">Any approver</option></select></label>
               <div class="action-buttons"><button id="refundActionButton" class="action-button" type="button" disabled>Propose refund</button><button id="cancelActionButton" class="action-button" type="button" disabled>Propose cancellation</button></div>
               <div id="actionCard" class="action-card" hidden></div>
             </section>
 
-            <section class="context-section history-section">
-              <div class="section-heading"><h3>Support history</h3><span id="historyCountPill" class="tiny-count">0</span></div>
+            <details class="context-section history-section">
+              <summary class="section-heading"><h3>Support history</h3><span id="historyCountPill" class="tiny-count">0</span></summary>
               <div id="historyList" class="history-list"><div class="light-empty">No previous conversations.</div></div>
-            </section>
+            </details>
           </div>
-
-          <section class="trace-section">
-            <div class="trace-heading"><div><div class="eyebrow">TRANSPARENCY</div><h2>Agent activity</h2></div><span id="traceCount" class="tiny-count">0</span></div>
-            <div id="traceList" class="trace-list"><div class="trace-empty"><span>◷</span><p>Tool calls and source data will appear here as the assistant works.</p></div></div>
-          </section>
         </aside>
       </div>
     </div>
@@ -187,7 +181,7 @@
       <section class="access-dialog" role="dialog" aria-modal="true" aria-labelledby="accessTitle">
         <button id="closeAccessButton" class="modal-close" type="button" aria-label="Close access settings">×</button>
         <div class="dialog-mark">N</div>
-        <div class="eyebrow">STAFF SIGN-IN</div>
+        
         <h2 id="accessTitle">Sign in to your support desk</h2>
         <p class="dialog-copy">Use the work email and password your administrator created. You stay signed in across refreshes until you sign out, close this tab, or the session expires.</p>
         <form id="accessForm">
@@ -198,7 +192,7 @@
           <div id="accessError" class="dialog-error" role="alert" hidden></div>
           <button id="connectButton" class="primary-button full-width" type="submit">Sign in <span>→</span></button>
         </form>
-        <div class="dialog-footnote"><span>♙</span> New staff accounts are created by an administrator.</div>
+        <div class="dialog-footnote">New staff accounts are created by an administrator.</div>
       </section>
     </div>
 

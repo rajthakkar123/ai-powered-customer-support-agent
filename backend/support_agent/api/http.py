@@ -31,7 +31,7 @@ from ..security.auth import SUPPORT_ROLES
 LOGGER = logging.getLogger("support_agent")
 # Increment when the browser and API contract change together; the page compares it on load
 # and warns when a server started before a code change is still running.
-API_VERSION = 4
+API_VERSION = 5
 MAX_BODY_BYTES = 16_384
 WEB_ROOT = Path(__file__).resolve().parents[3] / "frontend"
 STATIC_ASSETS = {
@@ -89,6 +89,13 @@ def execute_account_list(
     accounts: AccountService, authorization: str | None
 ) -> tuple[int, dict[str, object], str]:
     return _json_response(lambda: accounts.list_accounts(accounts.authenticate(authorization)))
+
+
+def execute_approver_list(
+    accounts: AccountService, authorization: str | None
+) -> tuple[int, dict[str, object], str]:
+    """Approvers a proposal can be routed to; any signed-in staff member may list them."""
+    return _json_response(lambda: accounts.list_approvers(accounts.authenticate(authorization)))
 
 
 def execute_account_create(
@@ -171,11 +178,12 @@ def execute_action_request(
         if not isinstance(body, dict):
             raise ValidationError("Body must be a JSON object.")
         if operation == "propose":
-            allowed = {"action_type", "order_id", "details", "idempotency_key"}
-            required = {"action_type", "order_id", "idempotency_key"}
+            required = {"action_type", "order_id", "idempotency_key", "reason"}
+            allowed = required | {"details", "approver_id"}
             if not required.issubset(body) or set(body) - allowed:
                 raise ValidationError(
-                    "Proposal body needs action_type, order_id, idempotency_key, and details."
+                    "Proposal body needs action_type, order_id, idempotency_key, and the "
+                    "customer's reason; details and approver_id are optional."
                 )
             result = actions.propose(
                 body["action_type"],
@@ -183,7 +191,13 @@ def execute_action_request(
                 body.get("details"),
                 body["idempotency_key"],
                 principal,
+                reason=body["reason"],
+                approver_id=body.get("approver_id"),
             )
+        elif operation == "assign":
+            if set(body) != {"proposal_id", "approver_id"}:
+                raise ValidationError("Assign body must contain proposal_id and approver_id.")
+            result = actions.assign(body["proposal_id"], body["approver_id"], principal)
         elif operation == "decide":
             if set(body) != {"proposal_id", "decision", "idempotency_key"}:
                 raise ValidationError(
@@ -540,11 +554,13 @@ def create_handler(services: AppServices) -> type[BaseHTTPRequestHandler]:
             if path == "/products":
                 self._send(*execute_product_list(tools, authorization))
                 return
-            if path in {"/auth/me", "/admin/accounts"}:
+            if path in {"/auth/me", "/admin/accounts", "/approvers"}:
                 if services.accounts is None:
                     self._send(*_unavailable("Account"))
                 elif path == "/auth/me":
                     self._send(*execute_current_user(services.accounts, authorization))
+                elif path == "/approvers":
+                    self._send(*execute_approver_list(services.accounts, authorization))
                 else:
                     self._send(*execute_account_list(services.accounts, authorization))
                 return
@@ -598,7 +614,11 @@ def create_handler(services: AppServices) -> type[BaseHTTPRequestHandler]:
             path = urlsplit(self.path).path
             authorization = self.headers.get("Authorization")
             simulated = services.simulated_failures(self.headers.get(FAULT_INJECTION_HEADER))
-            action_route = {"/actions/propose": "propose", "/actions/decide": "decide"}.get(path)
+            action_route = {
+                "/actions/propose": "propose",
+                "/actions/assign": "assign",
+                "/actions/decide": "decide",
+            }.get(path)
             reply_match = re.fullmatch(rf"/conversations/{UUID_SEGMENT}/replies", path)
             account_routes = {"/auth/login", "/auth/logout", "/admin/accounts"}
             if (

@@ -78,10 +78,16 @@ Rules:
    damaged item, refund only that item: put its item_id in item_ids. Never state an amount
    you did not read from a tool. A human approves every action, so never tell the customer a
    refund or change is complete; say it is being reviewed.
+   Every refund or cancellation needs the customer's reason, given in this message or earlier
+   in the conversation (a description of damage or a defect counts). If they have not said
+   why, still check eligibility; if it is eligible, set needs_clarification, leave
+   proposed_action null, and ask them why they want it. proposed_action.reason is the
+   customer's reason, briefly and in their words; never invent or infer one.
 6. Return or refund questions: always call check_return_eligibility and use its result and
    deadline; never work eligibility out yourself from the policy text.
    Cancellation requests: call check_cancellation_eligibility. If it is eligible, propose an
-   order_change; otherwise explain the reason it returns. Never decide cancellability yourself.
+   order_change once you have the customer's reason (rule 5); otherwise explain the reason it
+   returns. Never decide cancellability yourself.
 7. If a tool returns tool_failure, do not call it again in this turn. Tell the customer there
    is a temporary problem looking up their records and offer to follow up shortly.
 8. Requests outside orders, shipping, returns, refunds, products, and support history:
@@ -588,6 +594,8 @@ class SupportAssistant:
             duration_ms=_elapsed_ms(started),
             arguments=arguments,
             result=content,
+            # Traces say plainly when a failure was the development switch, not a real outage.
+            simulated=status == "tool_failure" and name in simulated_failures,
         )
         return {
             "role": "tool",
@@ -738,6 +746,16 @@ class SupportAssistant:
         if turn["intent"] in {"out_of_scope", "greeting", "unclear"} and turn["proposed_action"]:
             turn = {**turn, "proposed_action": None}
             _step(trace, request_id, kind="guardrail", status="action_removed", reason="no_scope")
+        if turn["needs_clarification"] and turn["proposed_action"]:
+            # Still asking the customer something (such as their reason), so nothing is proposed.
+            turn = {**turn, "proposed_action": None}
+            _step(
+                trace,
+                request_id,
+                kind="guardrail",
+                status="action_removed",
+                reason="awaiting_clarification",
+            )
         if (
             turn["intent"] in FACT_INTENTS
             and not turn["needs_clarification"]

@@ -482,8 +482,11 @@ class SupportAssistantTests(unittest.TestCase):
             assistant, "Where is ord-5001?", simulated_failures=frozenset({"get_order_details"})
         )
         self.assertEqual(result["trace"][1]["status"], "tool_failure")
+        self.assertTrue(result["trace"][1]["simulated"])
         tool_message = json.loads(self.client.calls[1][-1]["content"])
         self.assertEqual(tool_message["error"]["code"], "tool_failure")
+        # The model sees an ordinary failure; only the trace records that it was simulated.
+        self.assertNotIn("simulated", tool_message["error"]["message"].lower())
 
     def test_turn_deadline_stops_before_calling_the_model(self) -> None:
         times = iter([0.0, 100.0])

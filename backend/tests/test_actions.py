@@ -270,5 +270,119 @@ class ActionServiceTests(unittest.TestCase):
         self.assertEqual(payload["error"]["code"], "unauthorized")
 
 
+class FakeApprovers:
+    """Approver directory double: approver-001 and approver-out are active approvers."""
+
+    ACCOUNTS = {
+        "approver-001": {"user_id": "approver-001", "display_name": "Sam Approver"},
+        "approver-out": {"user_id": "approver-out", "display_name": "Out-of-scope Approver"},
+    }
+
+    def find_approver(self, user_id: str) -> dict[str, str] | None:
+        return self.ACCOUNTS.get(user_id)
+
+
+class ApproverRoutingTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tools = build_tools(TOKEN_MAP, date(2026, 11, 4))
+        self.actions = ActionService(self.tools, approvers=FakeApprovers())
+        self.agent = self.tools.authenticator.authenticate("Bearer agent-one-secret")
+        self.in_scope_approver = self.tools.authenticator.authenticate("Bearer approver-one-secret")
+        # An approver with no customers assigned: only routing can give them a proposal.
+        self.routed_approver = Principal("approver-out", "support_approver", frozenset())
+
+    def propose(self, approver_id: str | None, key: str = "routing-key-000001") -> dict:
+        return self.actions.propose(
+            "refund",
+            "ord-5001",
+            {"item_ids": ["item-9002"]},
+            key,
+            self.agent,
+            approver_id=approver_id,
+        )
+
+    def test_assigned_approver_sees_and_decides_without_customer_scope(self) -> None:
+        proposal = self.propose("approver-out")
+        self.assertEqual(proposal["assigned_approver_name"], "Out-of-scope Approver")
+        queue = self.actions.list_proposals(self.routed_approver, "pending_approval")
+        self.assertEqual([item["proposal_id"] for item in queue], [proposal["proposal_id"]])
+        self.assertEqual(
+            self.actions.get(proposal["proposal_id"], self.routed_approver)["order_id"], "ord-5001"
+        )
+        decided = self.actions.decide(
+            proposal["proposal_id"], "approve", "routing-decision-01", self.routed_approver
+        )
+        self.assertEqual((decided["status"], decided["approved_by"]), ("executed", "approver-out"))
+        # The delegation covers this proposal only, not browsing the customer.
+        with self.assertRaises(NotFoundError):
+            self.tools.get_order_details("ord-5001", self.routed_approver)
+
+    def test_other_approvers_cannot_decide_or_see_an_assigned_proposal(self) -> None:
+        proposal = self.propose("approver-out")
+        self.assertEqual(
+            self.actions.list_proposals(self.in_scope_approver, "pending_approval"), []
+        )
+        with self.assertRaises(ForbiddenError):
+            self.actions.decide(
+                proposal["proposal_id"], "approve", "routing-decision-02", self.in_scope_approver
+            )
+        # Admins oversee the queue but only the approver role decides.
+        admin = self.tools.authenticator.authenticate("Bearer admin-secret-token")
+        self.assertEqual(
+            [item["proposal_id"] for item in self.actions.list_proposals(admin)],
+            [proposal["proposal_id"]],
+        )
+        for decision in ("approve", "reject"):
+            with self.assertRaises(ForbiddenError):
+                self.actions.decide(proposal["proposal_id"], decision, "routing-decision-03", admin)
+        self.assertEqual(
+            self.actions.get(proposal["proposal_id"], admin)["status"], "pending_approval"
+        )
+
+    def test_unassigned_proposals_stay_with_in_scope_approvers(self) -> None:
+        proposal = self.propose(None)
+        self.assertIsNone(proposal["assigned_approver_id"])
+        self.assertEqual(self.actions.list_proposals(self.routed_approver), [])
+        self.assertEqual(
+            [item["proposal_id"] for item in self.actions.list_proposals(self.in_scope_approver)],
+            [proposal["proposal_id"]],
+        )
+
+    def test_assignment_is_validated_and_limited_to_the_proposer_or_an_admin(self) -> None:
+        with self.assertRaises(ValidationError):
+            self.propose("agent-003")
+        proposal = self.propose(None)
+        other_agent = self.tools.authenticator.authenticate("Bearer agent-third-secret")
+        with self.assertRaises(ForbiddenError):
+            self.actions.assign(proposal["proposal_id"], "approver-001", other_agent)
+        assigned = self.actions.assign(proposal["proposal_id"], "approver-out", self.agent)
+        self.assertEqual(assigned["assigned_approver_id"], "approver-out")
+        self.assertEqual(assigned["audit"][-1]["event"], "approver_assigned")
+        self.actions.decide(
+            proposal["proposal_id"], "approve", "routing-decision-04", self.routed_approver
+        )
+        with self.assertRaises(ConflictError):
+            self.actions.assign(proposal["proposal_id"], "approver-001", self.agent)
+        status, payload, _ = execute_action_request(
+            self.actions,
+            "Bearer agent-one-secret",
+            "assign",
+            {"proposal_id": proposal["proposal_id"], "approver_id": "approver-001"},
+        )
+        self.assertEqual((status, payload["error"]["code"]), (409, "conflict"))
+
+    def test_proposer_cannot_route_a_proposal_to_themselves(self) -> None:
+        approver_as_proposer = self.tools.authenticator.authenticate("Bearer approver-one-secret")
+        with self.assertRaises(ValidationError):
+            self.actions.propose(
+                "refund",
+                "ord-5001",
+                None,
+                "routing-key-000002",
+                approver_as_proposer,
+                approver_id="approver-001",
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

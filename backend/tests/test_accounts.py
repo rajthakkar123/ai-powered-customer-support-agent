@@ -164,6 +164,29 @@ class AccountServiceTests(unittest.TestCase):
         with self.assertRaises(NotFoundError):
             tools.call("get_order_details", {"order_id": "ord-5003"}, agent)
 
+    def test_approver_directory_lists_only_active_approvers(self) -> None:
+        self.create_agent()
+        approver = self.create_agent(
+            "approver@northstar.test", role="support_approver", display_name="Sam Approver"
+        )
+        agent = self.accounts.authenticate(self.bearer("agent@northstar.test", AGENT_PASSWORD))
+        listed = self.accounts.list_approvers(agent)
+        self.assertEqual(
+            listed,
+            [
+                {
+                    "user_id": approver["user_id"],
+                    "display_name": "Sam Approver",
+                    "email": "approver@northstar.test",
+                }
+            ],
+        )
+        self.assertEqual(
+            self.accounts.find_approver(approver["user_id"])["display_name"], "Sam Approver"
+        )
+        self.assertIsNone(self.accounts.find_approver(agent.user_id))
+        self.assertIsNone(self.accounts.find_approver("missing"))
+
     def test_password_reset_clears_lock_and_signs_out_sessions(self) -> None:
         authorization = self.bearer(DEFAULT_ADMIN_EMAIL, ADMIN_PASSWORD)
         self.accounts.reset_password(DEFAULT_ADMIN_EMAIL, "replacement-admin-password")

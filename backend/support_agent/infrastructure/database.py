@@ -312,6 +312,35 @@ class SupportDatabase:
             rows = connection.execute(f"SELECT {key}, payload FROM {table}").fetchall()  # noqa: S608
         return {row[key]: json.loads(row["payload"]) for row in rows}
 
+    def reset_test_activity(self) -> dict[str, int]:
+        """Return orders to their sample state and clear actions and assistant conversations.
+
+        Staff accounts, sessions, and LLM traces are kept. Seeded support history is restored
+        by the next sample sync.
+        """
+        tables = (
+            "action_audit",
+            "action_executions",
+            "action_proposals",
+            "idempotency_records",
+            "order_outcomes",
+            "conversation_events",
+        )
+        removed: dict[str, int] = {}
+        with self.session() as connection:
+            for table in tables:
+                # Table names are the constant tuple above, never input.
+                removed[table] = connection.execute(f"DELETE FROM {table}").rowcount  # noqa: S608
+            connection.execute(
+                "DELETE FROM conversation_messages WHERE conversation_id IN ("
+                "SELECT conversation_id FROM support_conversations "
+                "WHERE json_extract(payload, '$.runtime') = 1)"
+            )
+            removed["assistant_conversations"] = connection.execute(
+                "DELETE FROM support_conversations WHERE json_extract(payload, '$.runtime') = 1"
+            ).rowcount
+        return removed
+
     def order_outcomes(self) -> dict[str, dict[str, Any]]:
         """Runtime changes to orders, kept apart so sample-data sync never overwrites them."""
         with self.session() as connection:
@@ -586,7 +615,14 @@ def _staff_account(row: sqlite3.Row) -> dict[str, Any]:
 
 
 if __name__ == "__main__":
+    import sys
+
     database = SupportDatabase()
+    if sys.argv[1:] == ["reset-test-activity"]:
+        # Manual testing: undo refunds, cancellations, proposals, and chats; keep staff accounts.
+        removed = database.reset_test_activity()
+        print(json.dumps({"database": str(database.path), "removed": removed}, indent=2))
+        sys.exit(0)
     counts = database.sync_sample_data()
     print(
         json.dumps(

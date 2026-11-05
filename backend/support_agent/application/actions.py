@@ -13,6 +13,7 @@ import threading
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
@@ -22,7 +23,11 @@ from .tools import SupportTools
 
 IDEMPOTENCY_PATTERN = re.compile(r"^[A-Za-z0-9_-]{16,128}$")
 PROPOSAL_STATUSES = frozenset({"pending_approval", "executed", "rejected"})
+MIN_REASON_CHARS = 3
+MAX_REASON_CHARS = 500
+# Reviewers can see every proposal in scope; only the decider role can approve or reject.
 REVIEWER_ROLES = frozenset({"support_approver", "support_admin"})
+DECIDER_ROLE = "support_approver"
 
 
 class ActionTransaction(Protocol):
@@ -41,6 +46,10 @@ class ActionTransaction(Protocol):
     def update(self, proposal: dict[str, Any]) -> None: ...
     def execution(self, proposal_id: str) -> dict[str, Any] | None: ...
     def record_execution(self, proposal_id: str, result: dict[str, Any]) -> None: ...
+
+
+class ApproverDirectory(Protocol):
+    def find_approver(self, user_id: str) -> dict[str, Any] | None: ...
 
 
 class ActionRepository(Protocol):
@@ -117,9 +126,15 @@ class InMemoryActionRepository:
 class ActionService:
     """Creates pending proposals and executes them only after a distinct approver acts."""
 
-    def __init__(self, tools: SupportTools, repository: ActionRepository | None = None) -> None:
+    def __init__(
+        self,
+        tools: SupportTools,
+        repository: ActionRepository | None = None,
+        approvers: ApproverDirectory | None = None,
+    ) -> None:
         self.tools = tools
         self.repository: ActionRepository = repository or InMemoryActionRepository()
+        self.approvers = approvers
 
     def propose(
         self,
@@ -128,15 +143,26 @@ class ActionService:
         details: object,
         idempotency_key: object,
         principal: Principal,
-        reason: object = None,
+        *,
+        reason: object,
         conversation_id: str | None = None,
+        approver_id: object = None,
     ) -> dict[str, Any]:
         if not isinstance(action_type, str) or action_type not in {"refund", "order_change"}:
             raise ValidationError("action_type must be refund or order_change.")
         if not isinstance(order_id, str) or not re.fullmatch(r"ord-\d{4,}", order_id):
             raise ValidationError("order_id must be a valid order identifier.")
-        if reason is not None and (not isinstance(reason, str) or len(reason) > 500):
-            raise ValidationError("reason must be a string of at most 500 characters.")
+        # The approver decides with the customer's own reason in front of them, so it is required.
+        if (
+            not isinstance(reason, str)
+            or len(reason.strip()) < MIN_REASON_CHARS
+            or len(reason) > MAX_REASON_CHARS
+        ):
+            raise ValidationError(
+                "reason is required: record why the customer wants this "
+                f"({MIN_REASON_CHARS}-{MAX_REASON_CHARS} characters)."
+            )
+        approver = self._approver(approver_id, principal.user_id) if approver_id else None
         key = _idempotency_key(idempotency_key)
         # The fingerprint describes the request, not derived state, so a replay still matches
         # after the order has changed (for example once the refund was executed).
@@ -168,14 +194,24 @@ class ActionService:
                 "created_by": principal.user_id,
                 "created_at": _now(),
                 # Context for the approver; excluded from the idempotency fingerprint.
-                "reason": reason.strip() if isinstance(reason, str) and reason.strip() else None,
+                "reason": reason.strip(),
                 "source": "assistant" if conversation_id else "agent",
                 "conversation_id": conversation_id,
+                # None means any approver with the customer in scope may decide.
+                "assigned_approver_id": approver["user_id"] if approver else None,
+                "assigned_approver_name": approver["display_name"] if approver else None,
                 "approved_by": None,
                 "execution": None,
                 "audit": [],
             }
             _audit(proposal, "proposal_created", principal.user_id, "Awaiting human approval.")
+            if approver:
+                _audit(
+                    proposal,
+                    "approver_assigned",
+                    principal.user_id,
+                    f"Sent to {approver['display_name']} for approval.",
+                )
             tx.insert(proposal)
             tx.save_proposal_key(principal.user_id, key, proposal["proposal_id"], fingerprint)
             return proposal
@@ -191,13 +227,19 @@ class ActionService:
             raise ValidationError("decision must be approve or reject.")
         key = _idempotency_key(idempotency_key)
         with self.repository.transaction() as tx:
-            proposal = self._authorized(tx, proposal_id, principal)
-            if principal.role not in REVIEWER_ROLES:
+            proposal = self._visible(tx, proposal_id, principal)
+            # Admins oversee the queue but never decide: only the approver role approves.
+            if principal.role != DECIDER_ROLE:
                 raise ForbiddenError("A support approver role is required to decide this proposal.")
             if principal.user_id == proposal["created_by"]:
                 raise ForbiddenError(
                     "The proposal creator cannot approve or reject their own proposal."
                 )
+            assignee = proposal.get("assigned_approver_id")
+            if assignee and assignee != principal.user_id:
+                raise ForbiddenError("This proposal is assigned to a different approver.")
+            # The assigned approver acts for this proposal's customer only, scope or not.
+            principal = _acting_for(principal, proposal)
             previous_decision = tx.decision_key(proposal["proposal_id"], key)
             if previous_decision is not None:
                 if previous_decision != decision:
@@ -236,9 +278,33 @@ class ActionService:
             tx.update(proposal)
             return proposal
 
+    def assign(
+        self, proposal_id: object, approver_id: object, principal: Principal
+    ) -> dict[str, Any]:
+        """Route a pending proposal to one approver; only its creator or an admin may do so."""
+        with self.repository.transaction() as tx:
+            proposal = self._visible(tx, proposal_id, principal)
+            if principal.user_id != proposal["created_by"] and principal.role != "support_admin":
+                raise ForbiddenError("Only the proposer or an admin can choose the approver.")
+            if proposal["status"] != "pending_approval":
+                raise ConflictError("Only a pending proposal can be sent to an approver.")
+            approver = self._approver(approver_id, str(proposal["created_by"]))
+            if proposal.get("assigned_approver_id") == approver["user_id"]:
+                return proposal
+            proposal["assigned_approver_id"] = approver["user_id"]
+            proposal["assigned_approver_name"] = approver["display_name"]
+            _audit(
+                proposal,
+                "approver_assigned",
+                principal.user_id,
+                f"Sent to {approver['display_name']} for approval.",
+            )
+            tx.update(proposal)
+            return proposal
+
     def get(self, proposal_id: object, principal: Principal) -> dict[str, Any]:
         with self.repository.transaction() as tx:
-            return self._authorized(tx, proposal_id, principal)
+            return self._visible(tx, proposal_id, principal)
 
     def open_proposal(
         self, order_id: str, action_type: str, principal: Principal
@@ -254,8 +320,9 @@ class ActionService:
     def list_proposals(self, principal: Principal, status: object = None) -> list[dict[str, Any]]:
         """Proposals the principal may see, newest first.
 
-        Approvers and admins see every proposal for customers in their scope; agents see only
-        the proposals they created. Out-of-scope proposals are filtered, never reported.
+        Agents see the proposals they created. Approvers see proposals assigned to them, plus
+        unassigned ones for customers in their scope. Admins see everything. Anything else is
+        filtered, never reported.
         """
         if status is not None and status not in PROPOSAL_STATUSES:
             raise ValidationError("status must be pending_approval, executed, or rejected.")
@@ -267,9 +334,10 @@ class ActionService:
                 continue
             if principal.role not in REVIEWER_ROLES and proposal["created_by"] != principal.user_id:
                 continue
-            try:
-                require_customer_access(principal, str(proposal["customer_id"]))
-            except NotFoundError:
+            assignee = proposal.get("assigned_approver_id")
+            if principal.role == "support_approver" and assignee and assignee != principal.user_id:
+                continue
+            if not _may_view(principal, proposal):
                 continue
             visible.append(proposal)
         return sorted(visible, key=lambda item: str(item.get("created_at") or ""), reverse=True)
@@ -364,8 +432,20 @@ class ActionService:
         tx.record_execution(proposal["proposal_id"], result)
         return result
 
+    def _approver(self, approver_id: object, creator_id: str) -> dict[str, Any]:
+        if self.approvers is None:
+            raise ValidationError("Approver routing is not configured.")
+        if not isinstance(approver_id, str) or not approver_id.strip():
+            raise ValidationError("approver_id must name an approver account.")
+        approver = self.approvers.find_approver(approver_id)
+        if approver is None:
+            raise ValidationError("approver_id must be an active approver account.")
+        if approver["user_id"] == creator_id:
+            raise ValidationError("The proposer cannot be the approver.")
+        return approver
+
     @staticmethod
-    def _authorized(
+    def _visible(
         tx: ActionTransaction, proposal_id: object, principal: Principal
     ) -> dict[str, Any]:
         try:
@@ -373,10 +453,32 @@ class ActionService:
         except (ValueError, TypeError, AttributeError) as error:
             raise NotFoundError() from error
         proposal = tx.get(proposal_uuid)
-        if proposal is None:
+        if proposal is None or not _may_view(principal, proposal):
             raise NotFoundError()
-        require_customer_access(principal, str(proposal["customer_id"]))
         return proposal
+
+
+def _may_view(principal: Principal, proposal: dict[str, Any]) -> bool:
+    """Customer scope, or being the assigned approver of this one proposal."""
+    if proposal.get("assigned_approver_id") == principal.user_id:
+        return True
+    try:
+        require_customer_access(principal, str(proposal["customer_id"]))
+    except NotFoundError:
+        return False
+    return True
+
+
+def _acting_for(principal: Principal, proposal: dict[str, Any]) -> Principal:
+    # Assignment delegates access to this proposal's customer for the decision, nothing wider.
+    if proposal.get("assigned_approver_id") != principal.user_id:
+        return principal
+    customer_id = str(proposal["customer_id"])
+    return replace(
+        principal,
+        customer_ids=principal.customer_ids | {customer_id},
+        active_customer_id=customer_id,
+    )
 
 
 def _idempotency_key(value: object) -> str:

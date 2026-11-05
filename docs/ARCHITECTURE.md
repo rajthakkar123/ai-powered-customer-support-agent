@@ -45,6 +45,8 @@ Every request has a `request_id`. Every model call and every assistant request, 
 - **Two scopes apply to every lookup.** Staff scope (which customers this account may see) *and* conversation scope (`Principal.for_conversation`): during an assistant turn, tools can only reach the active conversation's customer, even for an agent or admin who may see others.
 - **No enumeration.** Missing and out-of-scope records return the same `not_found`. The assistant additionally checks, on the server, every order ID in the customer's message; if the customer cannot see it, wording that would hint it exists elsewhere ("belongs to another customer", "under a different account") is replaced with standard not-found wording. This was found and fixed through a live eval.
 - **Lists are filtered, not reported.** `/customers`, the approval queue, and conversation threads only include records in scope; conversations are also owner-scoped.
+- **Approver routing is a narrow grant.** A proposal can be assigned (by its proposer or an admin, while pending) to one active approver from `GET /approvers`. That approver sees and decides that proposal even outside their customer scope; the decision runs with access to that one customer only, and other approvers are refused with 403. Unassigned proposals stay with approvers who have the customer.
+- **Only approvers decide.** `decide` requires the `support_approver` role. Admins can see every proposal and reassign it, but they cannot approve or reject. That keeps account provisioning and money movement in separate hands.
 
 ## Failed tool executions and retries
 
@@ -117,5 +119,4 @@ Alerts would page on: provider 401/403 (bad key), tool error rate above baseline
 
 - SQLite with a single writer is right for this demo; production would use a managed database.
 - Approval execution records a sample outcome; no payment processor or carrier is connected.
-- The approver can sign in on the agent's screen to decide; production would rely on the approver's own queue only.
 - There are no browser end-to-end tests yet (Playwright); the UI is checked by syntax and manual review.
