@@ -12,6 +12,14 @@ start.sh    Bash setup and startup script for Unix environments
 PLAN.md     Delivery plan and completed end-to-end flow
 ```
 
+## Prerequisites
+
+- Python 3.11 or newer with `venv` and `pip` available.
+- Windows PowerShell 5.1 or newer on Windows, or Bash on macOS/Linux.
+- A modern browser. Node.js is optional and is used only for the frontend syntax check.
+- Internet access on first launch to install pinned Python dependencies. An OpenAI API key and provider access are needed only for live AI replies; the support workspace and backend checks otherwise work without a key.
+- No separate database installation is required: the app uses Python's built-in SQLite support.
+
 ## Run locally
 
 On Windows, use PowerShell from the project root:
@@ -36,7 +44,40 @@ Passwords are hashed with scrypt and must be 12–128 characters.
 
 On macOS/Linux, run `bash ./start.sh` from the root instead.
 
+### Environment variables and secrets
+
+The backend loads `backend/.env` automatically. Start from the checked-in example:
+
+```powershell
+Copy-Item .\backend\.env.example .\backend\.env
+```
+
+On macOS/Linux, use `cp backend/.env.example backend/.env`. Edit the local file before starting. Real `.env` files are ignored by Git and must never be committed. Values can also be set in the shell before launching; shell values take precedence over `.env` values.
+
+| Variable | Default / purpose |
+| --- | --- |
+| `SUPPORT_ADMIN_EMAIL` | `admin@northstar.test`; email for the initial administrator. |
+| `SUPPORT_ADMIN_PASSWORD` | Optional initial admin password, minimum 12 characters. Leave empty to generate a password printed once at startup. Setting this later does not change an existing password; use the recovery command under Staff accounts. |
+| `SUPPORT_HOST` | `127.0.0.1`; bind address. Keep local development bound to loopback. |
+| `SUPPORT_PORT` | `8000`; local HTTP port. |
+| `SUPPORT_DATABASE_PATH` | `backend/data/support_agent.sqlite3`; path to the SQLite database. |
+| `SUPPORT_AS_OF_DATE` | Current local date; override to make return-window decisions reproducible. Format: `YYYY-MM-DD`. |
+| `SUPPORT_ENVIRONMENT` | The launcher defaults to `development`, enabling the demo tool-failure control. Use a non-development value to disable fault injection. |
+| `OPENAI_API_KEY` | Optional. Enables live assistant responses. Keep it in the ignored `.env` file or the process environment; never paste it into source files or logs. |
+| `OPENAI_MODEL` | `gpt-4o-mini`; model name used when `OPENAI_API_KEY` is configured. |
+
 The database is `backend/data/support_agent.sqlite3` by default. The app creates or upgrades its schema and re-syncs sample customers, products, orders, items, shipping, support history, and policies every startup. Complaints, conversations, action proposals, approval audit entries, and idempotency records are retained. `SUPPORT_DATABASE_PATH` can point to another SQLite file. The support API scopes customer and order data to the connected agent.
+
+### Database setup
+
+The launcher creates the database directory and SQLite file on first run, applies schema migrations, and seeds or refreshes sample records before starting the API. No manual setup is normally needed. To run the schema/sample-data sync yourself after the launcher has created the virtual environment:
+
+```powershell
+Set-Location .\backend
+.\.venv\Scripts\python.exe -m support_agent.infrastructure.database
+```
+
+On macOS/Linux, use `cd backend && ./.venv/bin/python -m support_agent.infrastructure.database`. User-created conversations, complaints, proposals, and audit records persist across restarts; the SQLite file is local runtime data and is ignored by Git.
 
 The staff API exposes `GET /customers` for the authenticated agent's customer scope and `GET /products` for the sample product catalog. Both require a signed-in staff session. The assistant can also retrieve individual product facts through its validated read-only tool set. The former shopper login, checkout, and complaint submission routes are not exposed in this support-only build.
 

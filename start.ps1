@@ -5,14 +5,6 @@ $backendDir = Join-Path $projectRoot 'backend'
 $venvDir = Join-Path $backendDir '.venv'
 $venvPython = Join-Path $venvDir 'Scripts\python.exe'
 $requirements = Join-Path $backendDir 'requirements.txt'
-$databasePath = if ($env:SUPPORT_DATABASE_PATH) {
-    $env:SUPPORT_DATABASE_PATH
-} else {
-    Join-Path $backendDir 'data\support_agent.sqlite3'
-}
-$port = if ($env:SUPPORT_PORT) { $env:SUPPORT_PORT } else { '8000' }
-$url = "http://127.0.0.1:$port/"
-
 function Get-PythonCommand {
     $pythonLauncher = Get-Command py -ErrorAction SilentlyContinue
     if ($pythonLauncher) {
@@ -53,6 +45,31 @@ try {
     } finally {
         Pop-Location
     }
+
+    $dotenvPath = Join-Path $backendDir '.env'
+    if (Test-Path -LiteralPath $dotenvPath) {
+        $dotenvJson = & $venvPython -c "import json,sys; from dotenv import dotenv_values; allowed=('SUPPORT_ADMIN_EMAIL','SUPPORT_ADMIN_PASSWORD','SUPPORT_HOST','SUPPORT_PORT','SUPPORT_DATABASE_PATH','SUPPORT_AS_OF_DATE','SUPPORT_ENVIRONMENT','OPENAI_API_KEY','OPENAI_MODEL'); values=dotenv_values(sys.argv[1]); print(json.dumps({key: values.get(key) for key in allowed if values.get(key) is not None}))" $dotenvPath
+        if ($LASTEXITCODE -ne 0) { throw 'Could not read backend/.env settings.' }
+        $dotenvSettings = $dotenvJson | ConvertFrom-Json
+        foreach ($name in @(
+            'SUPPORT_ADMIN_EMAIL', 'SUPPORT_ADMIN_PASSWORD', 'SUPPORT_HOST', 'SUPPORT_PORT',
+            'SUPPORT_DATABASE_PATH', 'SUPPORT_AS_OF_DATE', 'SUPPORT_ENVIRONMENT',
+            'OPENAI_API_KEY', 'OPENAI_MODEL'
+        )) {
+            $value = $dotenvSettings.$name
+            if (-not [Environment]::GetEnvironmentVariable($name, 'Process') -and $null -ne $value) {
+                [Environment]::SetEnvironmentVariable($name, [string]$value, 'Process')
+            }
+        }
+    }
+
+    $databasePath = if ($env:SUPPORT_DATABASE_PATH) {
+        $env:SUPPORT_DATABASE_PATH
+    } else {
+        Join-Path $backendDir 'data\support_agent.sqlite3'
+    }
+    $port = if ($env:SUPPORT_PORT) { $env:SUPPORT_PORT } else { '8000' }
+    $url = "http://127.0.0.1:$port/"
 
     $env:SUPPORT_DATABASE_PATH = $databasePath
     $env:SUPPORT_PORT = $port

@@ -5,8 +5,6 @@ PROJECT_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="$PROJECT_ROOT/backend"
 VENV_DIR="$BACKEND_DIR/.venv"
 DB_FILE="$BACKEND_DIR/data/support_agent.sqlite3"
-PORT="${SUPPORT_PORT:-8000}"
-export SUPPORT_DATABASE_PATH="${SUPPORT_DATABASE_PATH:-$DB_FILE}"
 if [[ -x "$VENV_DIR/bin/python" ]]; then
   VENV_PYTHON="$VENV_DIR/bin/python"
 elif [[ -x "$VENV_DIR/Scripts/python.exe" ]]; then
@@ -39,6 +37,20 @@ if ! (cd "$BACKEND_DIR" && "$PYTHON" -m scripts.ensure_requirements); then
   echo "Backend requirement installation failed." >&2
   exit 1
 fi
+
+if [[ -f "$BACKEND_DIR/.env" ]]; then
+  for setting in SUPPORT_ADMIN_EMAIL SUPPORT_ADMIN_PASSWORD SUPPORT_HOST SUPPORT_PORT \
+    SUPPORT_DATABASE_PATH SUPPORT_AS_OF_DATE SUPPORT_ENVIRONMENT OPENAI_API_KEY OPENAI_MODEL; do
+    if [[ -z "${!setting:-}" ]]; then
+      setting_value="$(CSA_DOTENV_PATH="$BACKEND_DIR/.env" CSA_DOTENV_KEY="$setting" \
+        "$PYTHON" -c 'import os,sys; from dotenv import dotenv_values; print(dotenv_values(os.environ["CSA_DOTENV_PATH"]).get(os.environ["CSA_DOTENV_KEY"]) or "")')"
+      if [[ -n "$setting_value" ]]; then export "$setting=$setting_value"; fi
+    fi
+  done
+fi
+
+PORT="${SUPPORT_PORT:-8000}"
+export SUPPORT_DATABASE_PATH="${SUPPORT_DATABASE_PATH:-$DB_FILE}"
 
 echo "Syncing SQLite schema and sample data..."
 (cd "$BACKEND_DIR" && "$PYTHON" -m support_agent.infrastructure.database)
