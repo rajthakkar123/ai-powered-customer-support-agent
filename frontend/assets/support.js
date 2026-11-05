@@ -8,7 +8,7 @@ const ROLE_LABELS = {
 };
 const SESSION_STORAGE_KEY = "northstar.staffSession";
 // Must equal API_VERSION in backend/support_agent/api/http.py (enforced by tests/test_api.py).
-const EXPECTED_API_VERSION = 6;
+const EXPECTED_API_VERSION = 7;
 // The backend stops a turn at 45 s; the browser waits longer so it sees the server's answer.
 const ASSISTANT_TIMEOUT_MS = 60_000;
 const COMPOSER_MODES = {
@@ -47,7 +47,7 @@ const OTHER_ORDER_CANDIDATES = ["ord-5003", "ord-5001", "ord-5112", "ord-5115", 
 
 function fillSample(text) {
   const ownOrders = state.customerDetails?.orders || [];
-  const orderId = state.selectedOrder?.order_id || ownOrders[0] || "ord-5001";
+  const orderId = state.selectedOrderId || state.selectedOrder?.order_id || ownOrders[0] || "ord-5001";
   const item = state.selectedOrder?.order_id === orderId ? state.selectedOrder.items?.[0]?.name : null;
   const other = OTHER_ORDER_CANDIDATES.find((candidate) => !ownOrders.includes(candidate)) || "ord-5003";
   return text
@@ -64,6 +64,7 @@ const state = {
   customer: null,
   customerDetails: null,
   selectedOrder: null,
+  selectedOrderId: null,
   conversationId: null,
   composerMode: "customer_message",
   lastTurnBody: null,
@@ -620,6 +621,7 @@ async function selectCustomer(customerId) {
   state.customer = customer;
   state.customerDetails = null;
   state.selectedOrder = null;
+  state.selectedOrderId = null;
   state.conversationId = null;
   state.proposal = null;
   state.lastTurnBody = null;
@@ -752,6 +754,7 @@ function orderSummary(orderId) {
 
 async function loadOrder(orderId) {
   const generation = ++state.orderLoadGeneration;
+  state.selectedOrderId = orderId;
   $("orderDetails").replaceChildren(document.createTextNode("Loading order…"));
   try {
     const order = await callTool("get_order_details", { order_id: orderId });
@@ -764,6 +767,7 @@ async function loadOrder(orderId) {
   } catch (error) {
     if (generation !== state.orderLoadGeneration) return;
     state.selectedOrder = null;
+    state.selectedOrderId = null;
     $("orderDetails").replaceChildren();
     const message = document.createElement("div");
     message.className = "light-empty";
@@ -1274,7 +1278,12 @@ async function askAssistant(event) {
   input.classList.remove("expanded");
   const mode = state.composerMode;
   addTextEvent({ kind: mode, text, at: new Date().toISOString() });
-  await sendTurn({ message: text, mode, customer_id: state.customer.customer_id });
+  await sendTurn({
+    message: text,
+    mode,
+    customer_id: state.customer.customer_id,
+    selected_order_id: state.selectedOrderId,
+  });
 }
 
 async function sendTurn(body) {

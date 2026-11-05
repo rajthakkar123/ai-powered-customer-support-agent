@@ -31,7 +31,7 @@ from ..security.auth import SUPPORT_ROLES
 LOGGER = logging.getLogger("support_agent")
 # Increment when the browser and API contract change together; the page compares it on load
 # and warns when a server started before a code change is still running.
-API_VERSION = 6
+API_VERSION = 7
 MAX_BODY_BYTES = 16_384
 WEB_ROOT = Path(__file__).resolve().parents[3] / "frontend"
 STATIC_ASSETS = {
