@@ -1,0 +1,4 @@
+# Runtime dependencies. Launchers install anything missing on every start
+# (scripts/ensure_requirements.py); tests/test_dependencies.py fails if code imports
+# a third-party package that is not listed here.
+python-dotenv==1.2.4

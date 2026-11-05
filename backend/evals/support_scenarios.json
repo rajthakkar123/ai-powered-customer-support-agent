@@ -1,0 +1,81 @@
+[
+  {
+    "id": "existing_order_details",
+    "type": "tool",
+    "tool": "get_order_details",
+    "arguments": {"order_id": "ord-5001"},
+    "token": "agent-one-secret",
+    "expected_status": 200,
+    "expected_result": {"order_id": "ord-5001", "customer_id": "cus-1001"}
+  },
+  {
+    "id": "catalog_product_details",
+    "type": "tool",
+    "token": "agent-one-secret",
+    "tool": "get_product_details",
+    "arguments": {"product_id": "prd-1001"},
+    "expected_status": 200,
+    "expected_result": {"product_id": "prd-1001", "name": "Ceramic Pour-over Set"}
+  },
+  {
+    "id": "missing_order",
+    "type": "tool",
+    "tool": "get_order_details",
+    "arguments": {"order_id": "ord-9999"},
+    "token": "agent-one-secret",
+    "expected_status": 404,
+    "expected_error": "not_found"
+  },
+  {
+    "id": "eligible_return",
+    "type": "eligibility",
+    "arguments": {"order_id": "ord-5001", "action": "return"},
+    "token": "agent-one-secret",
+    "expected_eligible": true
+  },
+  {
+    "id": "expired_return",
+    "type": "eligibility",
+    "arguments": {"order_id": "ord-5002", "action": "return"},
+    "token": "agent-one-secret",
+    "expected_eligible": false
+  },
+  {
+    "id": "unrelated_question_scope_contract",
+    "type": "scope_contract",
+    "message": "Can you diagnose this rash?",
+    "expected_answer": "I can help with orders, shipping, returns, and refunds."
+  },
+  {
+    "id": "backend_tool_failure",
+    "type": "failure",
+    "tool": "get_order_details",
+    "arguments": {"order_id": "ord-5001"},
+    "token": "agent-one-secret",
+    "expected_status": 503,
+    "expected_error": "tool_failure"
+  },
+  {
+    "id": "cross_customer_access",
+    "type": "tool",
+    "tool": "get_order_details",
+    "arguments": {"order_id": "ord-5003"},
+    "token": "agent-one-secret",
+    "expected_status": 404,
+    "expected_error": "not_found"
+  },
+  {
+    "id": "action_requires_approval",
+    "type": "approval",
+    "action_type": "refund",
+    "order_id": "ord-5001",
+    "expected_status": "pending_approval"
+  },
+  {
+    "id": "duplicate_action_executes_once",
+    "type": "idempotency",
+    "action_type": "refund",
+    "order_id": "ord-5001",
+    "expected_execution_count": 1
+  }
+]

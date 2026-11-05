@@ -1,0 +1,5 @@
+-r requirements.txt
+# Quality gate tools (scripts/check.ps1, scripts/check.sh, CI). Pinned for repeatable results.
+coverage==7.17.2
+mypy==2.4.1
+ruff==0.17.3

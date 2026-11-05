@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+backend/.venv/
+.devtools/
+
+# Secrets: real environment files are never committed; only the example is.
+.env
+.env.*
+!.env.example
+
+# Tooling caches and reports
+.coverage
+htmlcov/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+dist/
+build/
+
+# Runtime data and test leftovers
+backend/data/*.sqlite3
+backend/data/*.sqlite3-shm
+backend/data/*.sqlite3-wal
+backend/tests/tmp*/
+backend/evals/reports/
